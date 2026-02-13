@@ -9,6 +9,3 @@ httpx==0.28.1
 
 # Data
 pandas>=2.0.0
-
-# BVC fallback (scraping con navegador)
-playwright>=1.40.0

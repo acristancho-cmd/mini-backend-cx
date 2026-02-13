@@ -2,7 +2,6 @@
 Servicio BVC: API JWT (handshake + rest.bvc.com.co).
 Datos de Renta Variable (mercado local y global). Usa httpx (sin requests/urllib3).
 """
-import json
 import time
 import uuid
 from typing import Any
@@ -155,70 +154,11 @@ class BVCApi:
         return self._get_mercado_rv(["MGC"])
 
 
-def _get_mercado_via_playwright(url_page: str, board_filter: str | None = None) -> list[dict[str, Any]] | None:
-    """
-    Fallback Playwright: abre la página, deja que el navegador haga handshake + API
-    y captura la respuesta de rest.bvc.com.co. board_filter=None captura todo; "MGC" solo MGC.
-    """
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        return None
-
-    api_pattern = "**/market-information/rv/lvl-2*"
-    captured: list[dict[str, Any]] = []
-
-    def handle_route(route):
-        if board_filter and f"board={board_filter}" not in route.request.url:
-            route.continue_()
-            return
-        response = route.fetch()
-        raw = response.body()
-        try:
-            body = json.loads(raw.decode())
-            tab = body.get("data", {}).get("tab", [])
-            if tab:
-                captured.extend(tab)
-        except Exception:
-            pass
-        route.fulfill(status=response.status, headers=response.headers, body=raw)
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        try:
-            context = browser.new_context(
-                user_agent=BVC_HEADERS["User-Agent"],
-                viewport={"width": 1280, "height": 720},
-            )
-            page = context.new_page()
-            page.route(api_pattern, handle_route)
-            page.goto(url_page, wait_until="networkidle", timeout=30000)
-            context.close()
-        finally:
-            browser.close()
-
-    return _process_tab_data(captured) if captured else None
+def get_mercado_local() -> list[dict[str, Any]] | None:
+    """Mercado local (EQTY, REPO, TTV). Solo API (httpx)."""
+    return BVCApi().get_mercado_local()
 
 
-def get_mercado_local(use_browser: bool = False) -> list[dict[str, Any]] | None:
-    """Mercado local (EQTY, REPO, TTV). API primero; Playwright si falla."""
-    if not use_browser:
-        data = BVCApi().get_mercado_local()
-        if data is not None:
-            return data
-    return _get_mercado_via_playwright(
-        "https://www.bvc.com.co/mercado-local-en-linea?tab=renta-variable_mercado-local",
-        board_filter=None,
-    )
-
-
-def get_mercado_global(use_browser: bool = False) -> list[dict[str, Any]] | None:
-    """Mercado Global Colombiano (MGC). API primero; Playwright si falla."""
-    if not use_browser:
-        data = BVCApi().get_mercado_global()
-        if data is not None:
-            return data
-    return _get_mercado_via_playwright(
-        "https://www.bvc.com.co/mercado-local-en-linea?tab=renta-variable_mercado-global-colombiano",
-        board_filter="MGC",
-    )
+def get_mercado_global() -> list[dict[str, Any]] | None:
+    """Mercado Global Colombiano (MGC). Solo API (httpx)."""
+    return BVCApi().get_mercado_global()
