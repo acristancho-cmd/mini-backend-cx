@@ -1,5 +1,5 @@
 """
-Configuración del proyecto - IDs hardcodeados para Trii y competidores.
+Configuración: Trii, competidores (Play/App Store) y BVC.
 """
 from pydantic import BaseModel
 
@@ -42,3 +42,10 @@ APPSTORE_COMPETITORS = [
     {"app_id": 1460681130, "country": "mx", "app_name": "tyba"},
     {"app_id": 1485050953, "country": "mx", "app_name": "Fintual"},
 ]
+
+
+# ---------------------------------------------------------------------------
+# BVC (Bolsa de Valores de Colombia) - API protegida por JWT
+# ---------------------------------------------------------------------------
+BVC_BASE_URL = "https://www.bvc.com.co"
+BVC_API_URL = "https://rest.bvc.com.co"

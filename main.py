@@ -1,18 +1,26 @@
 """
-Mini Backend CX-service - TRII & Ratings
-Endpoints GET para rating y comentarios de App Store y Play Store.
-Todo hardcodeado: Trii + competidores.
+CX-service: rating, comentarios (App/Play Store) y mercado BVC.
+Solo endpoints GET; datos en vivo por llamada.
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import TRII_CONFIG, PLAYSTORE_COMPETITORS, APPSTORE_COMPETITORS
-from services.playstore import get_playstore_ratings_batch, get_playstore_trii_rating_only, get_playstore_trii_comments_only
-from services.appstore import get_appstore_ratings_batch, get_appstore_trii_rating_only, get_appstore_trii_comments_only
+from routers.bvc import router as bvc_router
+from services.appstore import (
+    get_appstore_ratings_batch,
+    get_appstore_trii_rating_only,
+    get_appstore_trii_comments_only,
+)
+from services.playstore import (
+    get_playstore_ratings_batch,
+    get_playstore_trii_rating_only,
+    get_playstore_trii_comments_only,
+)
 
 app = FastAPI(
     title="CX-service",
-    description="Rating y comentarios de App Store y Play Store para TRII",
+    description="Rating y comentarios App/Play Store (TRII y competidores) y datos mercado BVC.",
 )
 
 app.add_middleware(
@@ -23,9 +31,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(bvc_router)
+
 
 @app.get("/")
-def root():
+def root() -> dict:
+    """Health check."""
     return {"service": "CX-service", "status": "ok"}
 
 
@@ -33,11 +44,8 @@ def root():
 # Endpoint 1: TRII - solo rating y total_votos (sin comentarios)
 # ---------------------------------------------------------------------------
 @app.get("/trii")
-def get_trii():
-    """
-    Retorna rating y total de votos de la app Trii.
-    Play Store + App Store. Sin comentarios.
-    """
+def get_trii() -> dict:
+    """Rating y total de votos de la app Trii (Play Store + App Store)."""
     try:
         playstore_data = get_playstore_trii_rating_only(TRII_CONFIG.play_store_package)
         playstore_data["rating_global"] = round(playstore_data["rating_global"], 2)
@@ -60,11 +68,8 @@ def get_trii():
 # Endpoint 2: TRII - solo comentarios del último mes
 # ---------------------------------------------------------------------------
 @app.get("/trii-comments")
-def get_trii_comments():
-    """
-    Retorna solo comentarios del último mes de la app Trii.
-    Misma lógica que antes (corte a 30 días). Play Store + App Store.
-    """
+def get_trii_comments() -> dict:
+    """Comentarios del último mes de la app Trii (Play Store + App Store, corte 30 días)."""
     try:
         playstore_comments = get_playstore_trii_comments_only(TRII_CONFIG.play_store_package)
     except Exception as e:
@@ -82,26 +87,17 @@ def get_trii_comments():
 
 
 # ---------------------------------------------------------------------------
-# Endpoint 3: Ratings Play Store - competidores hardcodeados
+# Ratings competidores
 # ---------------------------------------------------------------------------
 @app.get("/ratings/playstore")
-def get_playstore_ratings():
-    """
-    Retorna solo ratings (rating_global, total_votos) de competidores en Play Store.
-    Lista hardcodeada: Flink, Hapi, tyba, Fintual, Zesty, Racional.
-    """
+def get_playstore_ratings() -> list:
+    """Ratings de competidores en Play Store (lista hardcodeada)."""
     return get_playstore_ratings_batch(PLAYSTORE_COMPETITORS, lang="es", country="co")
 
 
-# ---------------------------------------------------------------------------
-# Endpoint 4: Ratings App Store - competidores hardcodeados
-# ---------------------------------------------------------------------------
 @app.get("/ratings/appstore")
-def get_appstore_ratings():
-    """
-    Retorna solo ratings (rating_global, total_votos) de competidores en App Store.
-    Lista hardcodeada: Flink, Hapi, tyba, Fintual (México).
-    """
+def get_appstore_ratings() -> list:
+    """Ratings de competidores en App Store (lista hardcodeada)."""
     return get_appstore_ratings_batch(APPSTORE_COMPETITORS)
 
 

@@ -1,5 +1,14 @@
+# App
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
+pydantic>=2.0.0
+
+# Stores & APIs
 google-play-scraper==1.2.7
 httpx==0.28.1
-pydantic>=2.0.0
+
+# Data
+pandas>=2.0.0
+
+# BVC fallback (scraping con navegador)
+playwright>=1.40.0
