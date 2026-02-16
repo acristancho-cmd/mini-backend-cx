@@ -104,7 +104,7 @@ class BVCApi:
             # 2) Cookie y headers para token
             client.cookies.set("token", self.token, domain=".bvc.com.co", path="/")
             url = f"{self.api_url}/market-information/rv/lvl-2"
-            fecha_hoy = pd.Timestamp.now().strftime("%Y-%m-%d")
+            fecha_hoy = "2026-02-13"
             params = [
                 ("filters[marketDataRv][tradeDate]", fecha_hoy),
                 *[("filters[marketDataRv][board]", b) for b in boards],
@@ -146,12 +146,21 @@ class BVCApi:
         return _process_tab_data(lista_acciones)
 
     def get_mercado_local(self) -> list[dict[str, Any]] | None:
-        """Mercado local: EQTY, REPO, TTV."""
-        return self._get_mercado_rv(["EQTY", "REPO", "TTV"])
+        """Mercado local: pide EQTY+REPO+TTV, solo devuelve EQTY con actividad (volume o quantity > 0)."""
+        data = self._get_mercado_rv(["EQTY", "REPO", "TTV"])
+        if data is None:
+            return None
+        eqty = [r for r in data if r.get("board") == "EQTY"]
+        volume = lambda r: (r.get("volume") or 0) > 0
+        quantity = lambda r: (r.get("quantity") or 0) > 0
+        return [r for r in eqty if volume(r) or quantity(r)]
 
     def get_mercado_global(self) -> list[dict[str, Any]] | None:
-        """Mercado Global Colombiano (MGC)."""
-        return self._get_mercado_rv(["MGC"])
+        """Mercado Global Colombiano (MGC): solo filas con actividad (volume o quantity > 0)."""
+        data = self._get_mercado_rv(["MGC"])
+        if data is None:
+            return None
+        return [r for r in data if (r.get("volume") or 0) > 0 or (r.get("quantity") or 0) > 0]
 
 
 def get_mercado_local() -> list[dict[str, Any]] | None:
