@@ -104,7 +104,7 @@ class BVCApi:
             # 2) Cookie y headers para token
             client.cookies.set("token", self.token, domain=".bvc.com.co", path="/")
             url = f"{self.api_url}/market-information/rv/lvl-2"
-            fecha_hoy = "2026-02-13"
+            fecha_hoy = pd.Timestamp.now().strftime("%Y-%m-%d")
             params = [
                 ("filters[marketDataRv][tradeDate]", fecha_hoy),
                 *[("filters[marketDataRv][board]", b) for b in boards],
