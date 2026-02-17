@@ -2,9 +2,11 @@
 Servicio BVC: API JWT (handshake + rest.bvc.com.co).
 Datos de Renta Variable (mercado local y global). Usa httpx (sin requests/urllib3).
 """
+import base64
 import time
 import uuid
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 import pandas as pd
@@ -80,16 +82,20 @@ class BVCApi:
 
             token = data.get("token")
             if not token:
+                print("[bvc] handshake: respuesta sin token")
                 return None
+            print("[bvc] handshake: token OK")
             return token
 
-        except httpx.HTTPError:
+        except httpx.HTTPError as e:
+            print("[bvc] handshake error:", e)
             return None
 
-    def _get_mercado_rv(self, boards: list[str]) -> list[dict[str, Any]] | None:
+    def _get_mercado_rv(self, boards: list[str], fecha: str | None = None) -> list[dict[str, Any]] | None:
         """
         Obtiene data de Renta Variable (rest.bvc.com.co/market-information/rv/lvl-2).
         boards: ["EQTY","REPO","TTV"] para mercado local, ["MGC"] para mercado global.
+        fecha: opcional, YYYY-MM-DD; si no se pasa, se usa hoy.
         """
         with httpx.Client(
             headers=BVC_HEADERS,
@@ -99,28 +105,35 @@ class BVCApi:
             # 1) Handshake (mismo client para guardar cookies)
             self.token = self._get_handshake_token(client)
             if not self.token:
+                print("[bvc] _get_mercado_rv: sin token, abortando")
                 return None
 
             # 2) Cookie y headers para token
+            
             client.cookies.set("token", self.token, domain=".bvc.com.co", path="/")
             url = f"{self.api_url}/market-information/rv/lvl-2"
-            fecha_hoy = pd.Timestamp.now().strftime("%Y-%m-%d")
+            trade_date = fecha if fecha else "2026-02-16"  # hardcodeado para pruebas
+            print("[bvc] _get_mercado_rv: fecha=%s boards=%s" % (trade_date, boards))
             params = [
-                ("filters[marketDataRv][tradeDate]", fecha_hoy),
+                ("filters[marketDataRv][tradeDate]", trade_date),
                 *[("filters[marketDataRv][board]", b) for b in boards],
                 ("sorter[]", "tradeValue"),
                 ("sorter[]", "DESC"),
             ]
+            query_string = urlencode(params)
+            k_header = base64.b64encode(query_string.encode()).decode()
             headers = {
                 **BVC_HEADERS,
                 "Authorization": f"Bearer {self.token}",
-                "token": self.token,  # AUTH-2 "Missing token" suele esperar este nombre
+                "token": self.token,
                 "x-jwt-token": self.token,
+                "k": k_header,
             }
 
             try:
                 response = client.get(url, params=params, headers=headers, timeout=API_TIMEOUT)
                 _set_last_error(response.status_code, response.text)
+                print("[bvc] API status=%s" % response.status_code)
 
                 if response.status_code == 401:
                     self.token = self._get_handshake_token(client)
@@ -132,6 +145,7 @@ class BVCApi:
                         "Authorization": f"Bearer {self.token}",
                         "token": self.token,
                         "x-jwt-token": self.token,
+                        "k": k_header,
                     }
                     response = client.get(url, params=params, headers=headers, timeout=API_TIMEOUT)
                     _set_last_error(response.status_code, response.text)
@@ -139,35 +153,50 @@ class BVCApi:
                 response.raise_for_status()
                 _set_last_error(None, None)
                 json_data = response.json()
-            except httpx.HTTPError:
+            except httpx.HTTPError as e:
+                print("[bvc] _get_mercado_rv error:", getattr(getattr(e, "response", None), "status_code", None), e)
                 return None
 
         lista_acciones = json_data.get("data", {}).get("tab", [])
-        return _process_tab_data(lista_acciones)
+        print("[bvc] response OK, tab rows=%s" % len(lista_acciones))
+        if lista_acciones:
+            first = lista_acciones[0]
+            print("[bvc] sample: volume=%s quantity=%s lastPrice=%s" % (first.get("volume"), first.get("quantity"), first.get("lastPrice")))
+        processed = _process_tab_data(lista_acciones)
+        return processed
 
-    def get_mercado_local(self) -> list[dict[str, Any]] | None:
-        """Mercado local: pide EQTY+REPO+TTV, solo devuelve EQTY con actividad (volume o quantity > 0)."""
-        data = self._get_mercado_rv(["EQTY", "REPO", "TTV"])
+    def get_mercado_local(self, fecha: str | None = None) -> list[dict[str, Any]] | None:
+        """Mercado local: pide EQTY+REPO+TTV, solo devuelve EQTY con actividad (volume o quantity > 0). fecha opcional YYYY-MM-DD."""
+        data = self._get_mercado_rv(["EQTY", "REPO", "TTV"], fecha=fecha)
         if data is None:
+            print("[bvc] get_mercado_local: _get_mercado_rv devolvió None")
             return None
+        print("[bvc] get_mercado_local: raw rows=%s" % len(data))
         eqty = [r for r in data if r.get("board") == "EQTY"]
+        print("[bvc] get_mercado_local: EQTY rows=%s" % len(eqty))
+        if eqty:
+            with_vol = sum(1 for r in eqty if (r.get("volume") or 0) > 0)
+            with_qty = sum(1 for r in eqty if (r.get("quantity") or 0) > 0)
+            print("[bvc] get_mercado_local: con volume>0=%s, quantity>0=%s" % (with_vol, with_qty))
         volume = lambda r: (r.get("volume") or 0) > 0
         quantity = lambda r: (r.get("quantity") or 0) > 0
-        return [r for r in eqty if volume(r) or quantity(r)]
+        out = [r for r in eqty if volume(r) or quantity(r)]
+        print("[bvc] get_mercado_local: resultado final rows=%s" % len(out))
+        return out
 
-    def get_mercado_global(self) -> list[dict[str, Any]] | None:
-        """Mercado Global Colombiano (MGC): solo filas con actividad (volume o quantity > 0)."""
-        data = self._get_mercado_rv(["MGC"])
+    def get_mercado_global(self, fecha: str | None = None) -> list[dict[str, Any]] | None:
+        """Mercado Global Colombiano (MGC): solo filas con actividad (volume o quantity > 0). fecha opcional YYYY-MM-DD."""
+        data = self._get_mercado_rv(["MGC"], fecha=fecha)
         if data is None:
             return None
         return [r for r in data if (r.get("volume") or 0) > 0 or (r.get("quantity") or 0) > 0]
 
 
-def get_mercado_local() -> list[dict[str, Any]] | None:
-    """Mercado local (EQTY, REPO, TTV). Solo API (httpx)."""
-    return BVCApi().get_mercado_local()
+def get_mercado_local(fecha: str | None = None) -> list[dict[str, Any]] | None:
+    """Mercado local (EQTY, REPO, TTV). fecha opcional YYYY-MM-DD."""
+    return BVCApi().get_mercado_local(fecha=fecha)
 
 
-def get_mercado_global() -> list[dict[str, Any]] | None:
-    """Mercado Global Colombiano (MGC). Solo API (httpx)."""
-    return BVCApi().get_mercado_global()
+def get_mercado_global(fecha: str | None = None) -> list[dict[str, Any]] | None:
+    """Mercado Global Colombiano (MGC). fecha opcional YYYY-MM-DD."""
+    return BVCApi().get_mercado_global(fecha=fecha)
