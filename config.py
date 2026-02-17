@@ -1,6 +1,14 @@
 """
 Configuración: Trii, competidores (Play/App Store) y BVC.
 """
+import os
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from pydantic import BaseModel
 
 
@@ -49,3 +57,15 @@ APPSTORE_COMPETITORS = [
 # ---------------------------------------------------------------------------
 BVC_BASE_URL = "https://www.bvc.com.co"
 BVC_API_URL = "https://rest.bvc.com.co"
+
+# ---------------------------------------------------------------------------
+# Supabase (cache BVC - historial por fecha)
+# ---------------------------------------------------------------------------
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+BVC_CACHE_TABLE = "bvc_market_cache"
+
+# ---------------------------------------------------------------------------
+# Vercel Cron: secret para autorizar GET /api/cron/bvc-fetch (mínimo 16 caracteres)
+# ---------------------------------------------------------------------------
+CRON_SECRET = os.environ.get("CRON_SECRET", "")

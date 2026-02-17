@@ -1,5 +1,6 @@
 # App
 fastapi==0.115.6
+python-dotenv>=1.0.0
 uvicorn[standard]==0.34.0
 pydantic>=2.0.0
 
@@ -9,3 +10,7 @@ httpx==0.28.1
 
 # Data
 pandas>=2.0.0
+
+# BVC cache (Supabase) y job diario
+supabase>=2.0.0
+apscheduler>=3.10.0
