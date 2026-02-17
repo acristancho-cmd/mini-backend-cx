@@ -64,8 +64,3 @@ BVC_API_URL = "https://rest.bvc.com.co"
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 BVC_CACHE_TABLE = "bvc_market_cache"
-
-# ---------------------------------------------------------------------------
-# Vercel Cron: secret para autorizar GET /api/cron/bvc-fetch (mínimo 16 caracteres)
-# ---------------------------------------------------------------------------
-CRON_SECRET = os.environ.get("CRON_SECRET", "")

@@ -1,6 +1,11 @@
 """
 Router BVC: datos de Renta Variable (mercado local y global).
-Lee desde Supabase (cache). Sin fecha = última fecha disponible; con fecha = filtro por día (historial 1 semana).
+
+- GET /mercado-local, GET /mercado-global: leen desde Supabase (cache).
+  Sin fecha = última fecha disponible; con fecha = filtro por día (historial 7 días).
+- POST /fetch-and-save: obtiene datos de la API BVC para hoy y los guarda en Supabase.
+  Pensado para ser llamado por Lovable (Edge Function + pg_cron) L-V 4:00 PM Colombia.
+- POST /cleanup: borra registros con más de 7 días. Pensado para pg_cron 3:00 AM Colombia.
 """
 from fastapi import APIRouter, Query
 
@@ -19,7 +24,7 @@ def _response_from_cache(market: str, fecha: str | None) -> dict:
         return out
     return {
         "data": [],
-        "error": "No hay datos para esta fecha. Consulte una fecha con datos (historial 7 días) o espere al job de las 10:40 AM.",
+        "error": "No hay datos para esta fecha. Consulte una fecha con datos (historial 7 días) o ejecute POST /bvc/fetch-and-save.",
     }
 
 
@@ -37,3 +42,25 @@ def mercado_global(
 ) -> dict:
     """Mercado Global Colombiano (MGC). Datos desde cache Supabase."""
     return _response_from_cache("mercado_global", fecha)
+
+
+@router.post("/fetch-and-save")
+def fetch_and_save() -> dict:
+    """
+    Obtiene datos de la API BVC (mercado local y global para hoy) y los guarda en Supabase.
+    Llamar desde Lovable (Edge Function) según pg_cron L-V 4:00 PM Colombia.
+    """
+    from services.bvc.job import run_bvc_fetch_and_save
+    run_bvc_fetch_and_save()
+    return {"ok": True, "message": "BVC fetch y guardado ejecutado (mercado_local + mercado_global)."}
+
+
+@router.post("/cleanup")
+def cleanup() -> dict:
+    """
+    Borra en Supabase los registros de bvc_market_cache con más de 7 días.
+    Llamar desde Lovable según pg_cron 3:00 AM Colombia.
+    """
+    from services.bvc.job import run_bvc_cleanup
+    run_bvc_cleanup(days=7)
+    return {"ok": True, "message": "Cleanup ejecutado (registros > 7 días eliminados)."}

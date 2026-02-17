@@ -11,6 +11,5 @@ httpx==0.28.1
 # Data
 pandas>=2.0.0
 
-# BVC cache (Supabase) y job diario
+# BVC cache (Supabase)
 supabase>=2.0.0
-apscheduler>=3.10.0
